@@ -306,5 +306,9 @@ def launch_vm(json_file):
     esx_vm_configure(config_json)
     dst_vm.power_on()
 
-if __name__ == '__main__':
+
+def main():
     launch_vm(args.json_file)
+
+if __name__ == '__main__':
+    main()
