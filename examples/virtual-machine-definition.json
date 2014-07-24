@@ -1,0 +1,37 @@
+{
+  "hw_resourcepool": "foo-resource-pool-name",
+  "hw_datastore": "bar-datastore-name",
+  "hw_folder": "foo-folder-name",
+  "hw_template": "ubuntu_12.04_64",
+  "hw_vmnet": {
+    "dnsresolver": {
+      "0": "10.1.2.53",
+      "1": "10.1.2.54"
+    },
+    "gateway": "10.1.2.1",
+    "adapter": {
+      "0": {
+        "type": "vmxnet3",
+        "label": "network-label-name",
+        "ipaddress": "10.1.2.100",
+        "netmask": "255.255.255.0"
+      }
+    }
+  },
+  "hw_vcpu": 1,
+  "hw_mem_mb": 1024,
+  "hw_disk_gb": {
+    "1": 10,
+    "2": 5
+  },
+  "vapp_hw_disk_1_size": "10",
+  "vapp_hw_disk_1_mountpoint": "/logs",
+  "vapp_hw_disk_1_symlink": "/var/log/tomcat6",
+  "vapp_hw_disk_1_rmsymlinktgt": "true",
+  "vapp_hw_disk_1_filesystem": "ext4",
+  "vapp_hw_disk_2_size": "5",
+  "vapp_hw_disk_2_mountpoint": "/data",
+  "vapp_hw_disk_2_filesystem": "xfs",
+  "vapp_foo_bar": "custom-foo-bad-data",
+  "vapp_bar_foo": "custom-bar-foo-data"
+}

@@ -8,9 +8,7 @@ from pysphere import VIServer, VITask, VIApiException, VIException
 from pysphere.resources import VimService_services as VI
 
 
-parser = argparse.ArgumentParser(
-    description='ESX Igniter',
-    prog='egniter')
+parser = argparse.ArgumentParser(description='ESX Igniter', prog='egniter')
 parser.add_argument('-c', action="store", dest="config_file", required=True)
 parser.add_argument('-f', action="store", dest="json_file", required=True)
 parser.add_argument('-d', action="store_true", dest="delete_vm")
