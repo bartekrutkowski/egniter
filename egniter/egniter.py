@@ -200,7 +200,8 @@ def esx_vm_configure(config_json):
     # to the vm configuration - the dict disk number starts with 1, not 0
     # as the disk with number 0 is already inherited from the template
     if 'hw_disk_gb' in config_json:
-        for disk in config_json['hw_disk_gb']:
+        disks = config_json['hw_disk_gb']
+        for disk in disks:
             esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
             vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
@@ -218,7 +219,7 @@ def esx_vm_configure(config_json):
             hd = VI.ns0.VirtualDisk_Def("hd").pyclass()
             hd.Key = -100
             hd.UnitNumber = int(disk)
-            hd.CapacityInKB = config_json['hw_disk_gb'][disk] * 1024 * 1024
+            hd.CapacityInKB = disks[disk]['size'] * 1024 * 1024
             hd.ControllerKey = 1000
 
             backing = VI.ns0.VirtualDiskFlatVer2BackingInfo_Def(

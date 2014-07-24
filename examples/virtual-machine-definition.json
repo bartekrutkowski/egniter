@@ -21,17 +21,27 @@
   "hw_vcpu": 1,
   "hw_mem_mb": 1024,
   "hw_disk_gb": {
-    "1": 10,
-    "2": 5
+    "1": {
+      "size": 10,
+      "custom_fields": {
+        "mountpoint" : "/logs",
+        "filesystem" : "ext4",
+        "symlink" : "/var/log",
+        "rmsymlinktgt" : "true",
+        "format" : "true"
+      }
+    },
+    "2": {
+      "size": 5,
+      "custom_fields": {
+        "mountpoint" : "/nginxlogs",
+        "filesystem" : "ext4",
+        "symlink" : "/var/log/nginx",
+        "rmsymlinktgt" : "false",
+        "format" : "true"
+      }
+    }
   },
-  "vapp_hw_disk_1_size": "10",
-  "vapp_hw_disk_1_mountpoint": "/logs",
-  "vapp_hw_disk_1_symlink": "/var/log/tomcat6",
-  "vapp_hw_disk_1_rmsymlinktgt": "true",
-  "vapp_hw_disk_1_filesystem": "ext4",
-  "vapp_hw_disk_2_size": "5",
-  "vapp_hw_disk_2_mountpoint": "/data",
-  "vapp_hw_disk_2_filesystem": "xfs",
   "vapp_foo_bar": "custom-foo-bad-data",
   "vapp_bar_foo": "custom-bar-foo-data"
 }
