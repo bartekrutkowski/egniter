@@ -120,6 +120,42 @@ def esx_vm_get(esx, vm_name):
     return vm
 
 
+def vm_set_property(esx, vm, property_name, property_value):
+    """Set virtual machine vApp property"""
+
+    request = VI.ReconfigVM_TaskRequestMsg()
+    _this = request.new__this(vm._mor)
+    _this.set_attribute_type(vm._mor.get_attribute_type())
+    request.set_element__this(_this)
+
+    spec = request.new_spec()
+    vappconfig = spec.new_vAppConfig()
+
+    prop = vappconfig.new_property()
+    prop.set_element_operation('add')
+    info = prop.new_info()
+    method = getattr(info, "set_element_" + property_name)
+    method(property_value)
+    prop.set_element_info(info)
+
+    vappconfig.set_element_property(prop)
+    spec.set_element_vAppConfig(vappconfig)
+
+    request.set_element_spec(spec)
+    task = esx._proxy.ReconfigVM_Task(request)._returnval
+    vi_task = VITask(task, esx)
+
+    status = vi_task.wait_for_state(
+        [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
+    esx.disconnect()
+    if status == vi_task.STATE_ERROR:
+        print ('ERROR: %s' % vi_task.get_error_message())
+        return 1
+    else:
+        print ('vApp config successful.')
+        return 0
+
+
 def esx_vm_configure(config_json):
 
     config = config_create(config_json)
