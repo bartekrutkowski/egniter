@@ -1,14 +1,16 @@
+import argparse
+import json
+import re
+import sys
+
+import configparser
 from pysphere import VIServer, VITask, VIApiException, VIException
 from pysphere.resources import VimService_services as VI
-import json
-import argparse
-import re
-import configparser
-import sys
+
 
 parser = argparse.ArgumentParser(
     description='ESX Igniter',
-    prog='egniter.py')
+    prog='egniter')
 parser.add_argument('-c', action="store", dest="config_file", required=True)
 parser.add_argument('-f', action="store", dest="json_file", required=True)
 parser.add_argument('-d', action="store_true", dest="delete_vm")
@@ -25,7 +27,6 @@ ESX_PASS = config['esx']['pass']
 def esx_rp_get(esx, rp_name):
     rps = esx.get_resource_pools()
     for mor, path in rps.iteritems():
-        #print('Parsing RP %s' % path)
         if re.match('.*%s' % rp_name, path):
             return mor
     return None
@@ -34,7 +35,6 @@ def esx_rp_get(esx, rp_name):
 def esx_ds_get(esx, ds_name):
     datastores = esx.get_datastores()
     for mor, path in datastores.iteritems():
-        #print('Parsing DS %s' % path)
         if re.match('.*%s' % ds_name, path):
             return mor
     return None
@@ -62,24 +62,44 @@ def config_create(config_json):
         if 'vapp_' in k:
             counter += 1
             name = k.split('vapp_')[1]
-            vapp_properties['add'].append(
-		### make VAPP_CATEGORY being configurable
-                {'key': counter, 'id': name, 'value': v, 'category': 'VAPP_CATEGORY'})
+            vapp_properties['add'].append({
+                ### make VAPP_CATEGORY being configurable
+                'key': counter,
+                'id': name,
+                'value': v,
+                'category': 'VAPP_CATEGORY'
+            })
         elif 'hw_vmnet' in k:
             for ns in v['dnsresolver']:
                 counter += 1
-                vapp_properties['add'].append(
-                    {'key': counter, 'id': 'net_dnsresolver_%s' % ns, 'value': v['dnsresolver'][ns], 'category': 'VAPP_CATEGORY'})
+                vapp_properties['add'].append({
+                    'key': counter,
+                    'id': 'net_dnsresolver_%s' % ns,
+                    'value': v['dnsresolver'][ns],
+                    'category': 'VAPP_CATEGORY'
+                })
             for nic in v['adapter']:
                 counter += 1
-                vapp_properties['add'].append(
-                    {'key': counter, 'id': 'net_ipaddress_%s' % nic, 'value': v['adapter'][nic]['ipaddress'], 'category': 'VAPP_CATEGORY'})
+                vapp_properties['add'].append({
+                    'key': counter,
+                    'id': 'net_ipaddress_%s' % nic,
+                    'value': v['adapter'][nic]['ipaddress'],
+                    'category': 'VAPP_CATEGORY'
+                })
                 counter += 1
-                vapp_properties['add'].append(
-                    {'key': counter, 'id': 'net_netmask_%s' % nic, 'value': v['adapter'][nic]['netmask'], 'category': 'VAPP_CATEGORY'})
+                vapp_properties['add'].append({
+                    'key': counter,
+                    'id': 'net_netmask_%s' % nic,
+                    'value': v['adapter'][nic]['netmask'],
+                    'category': 'VAPP_CATEGORY'
+                })
             counter += 1
-            vapp_properties['add'].append(
-                {'key': counter, 'id': 'net_gateway', 'value': v['gateway'], 'category': 'VAPP_CATEGORY'})
+            vapp_properties['add'].append({
+                'key': counter,
+                'id': 'net_gateway',
+                'value': v['gateway'],
+                'category': 'VAPP_CATEGORY'
+            })
     return vapp_properties
 
 
@@ -277,8 +297,8 @@ def esx_vm_destroy(vm_name):
         vm = esx_vm_get(esx, vm_name)
         if not isinstance(vm, int):
             if not args.delete_vm:
-                print(
-                    'ERROR: I cant destroy the VM, because delete argument was not used, exiting.')
+                print('ERROR: I cant destroy the VM, because delete '
+                      'argument was not used, exiting.')
                 sys.exit(1)
             if not vm.is_powered_off():
                 vm.power_off()
