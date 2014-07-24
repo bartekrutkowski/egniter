@@ -7,7 +7,7 @@ import configparser
 import sys
 
 parser = argparse.ArgumentParser(
-    description='SkyGo ESX Igniter',
+    description='ESX Igniter',
     prog='egniter.py')
 parser.add_argument('-c', action="store", dest="config_file", required=True)
 parser.add_argument('-f', action="store", dest="json_file", required=True)
