@@ -208,6 +208,8 @@ def esx_vm_configure(config_json):
         [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
     esx.disconnect()
 
+    # vm_set_property(esx, vm, 'vapp_net_hostname', config_json['vapp_net_hostname'])
+
     esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
     vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
@@ -255,7 +257,7 @@ def esx_vm_configure(config_json):
             hd = VI.ns0.VirtualDisk_Def("hd").pyclass()
             hd.Key = -100
             hd.UnitNumber = int(disk)
-            hd.CapacityInKB = disk['size'] * 1024 * 1024
+            hd.CapacityInKB = disks[disk]['size'] * 1024 * 1024
             hd.ControllerKey = 1000
 
             backing = VI.ns0.VirtualDiskFlatVer2BackingInfo_Def(
