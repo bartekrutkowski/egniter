@@ -156,6 +156,39 @@ def vm_set_property(esx, vm, property_name, property_value):
         return 0
 
 
+def vm_set_hw(esx, vm, param_name, param_value):
+    """Set virtual machine hardware item value"""
+
+    request = VI.ReconfigVM_TaskRequestMsg()
+    _this = request.new__this(vm._mor)
+    _this.set_attribute_type(vm._mor.get_attribute_type())
+    request.set_element__this(_this)
+
+    spec = request.new_spec()
+
+    if param_name is 'hw_mem_mb':
+        spec.set_element_memoryMB(param_value)
+    elif param_name is 'hw_vcpu':
+        spec.set_element_numCoresPerSocket(param_value)
+        spec.set_element_numCPUs(param_value)
+
+    request.set_element_spec(spec)
+    task = esx._proxy.ReconfigVM_Task(request)._returnval
+    vi_task = VITask(task, esx)
+
+    status = vi_task.wait_for_state(
+        [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
+    esx.disconnect()
+
+    if status == vi_task.STATE_ERROR:
+        print ('ERROR: %s' % vi_task.get_error_message())
+        return 1
+    else:
+        print ('Parameter {param_name}={param_value} set.').format(
+            param_name=param_name, param_value=param_value)
+        return 0
+
+
 def esx_vm_configure(config_json):
 
     config = config_create(config_json)
@@ -172,12 +205,16 @@ def esx_vm_configure(config_json):
     spec = request.new_spec()
     vappconfig = spec.new_vAppConfig()
 
+    print('config: %s' % config)
+    print('config items: %s' % config.items())
     for operation, items in config.items():
         for item in items:
             prop = vappconfig.new_property()
             prop.set_element_operation(operation)
             info = prop.new_info()
             for k, v in item.items():
+                print('k: %s' % k)
+                print('v: %s' % v)
                 method = getattr(info, "set_element_" + k)
                 method(v)
             prop.set_element_info(info)
@@ -197,30 +234,24 @@ def esx_vm_configure(config_json):
     esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
     vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
-    spec = request.new_spec()
-    spec.set_element_memoryMB(config_json['hw_mem_mb'])
-
-    request.set_element_spec(spec)
-    task = esx._proxy.ReconfigVM_Task(request)._returnval
-    vi_task = VITask(task, esx)
-
-    status = vi_task.wait_for_state(
-        [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
-    esx.disconnect()
-
-    # vm_set_property(esx, vm, 'vapp_net_hostname', config_json['vapp_net_hostname'])
+    vm_set_hw(esx, vm, 'hw_mem_mb', config_json['hw_mem_mb'])
 
     esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
     vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
-    request = VI.ReconfigVM_TaskRequestMsg()
-    _this = request.new__this(vm._mor)
-    _this.set_attribute_type(vm._mor.get_attribute_type())
-    request.set_element__this(_this)
+    # request = VI.ReconfigVM_TaskRequestMsg()
+    # _this = request.new__this(vm._mor)
+    # _this.set_attribute_type(vm._mor.get_attribute_type())
+    # request.set_element__this(_this)
 
-    spec = request.new_spec()
-    spec.set_element_numCoresPerSocket(config_json['hw_vcpu'])
-    spec.set_element_numCPUs(config_json['hw_vcpu'])
+    # spec = request.new_spec()
+    # spec.set_element_numCoresPerSocket(config_json['hw_vcpu'])
+    # spec.set_element_numCPUs(config_json['hw_vcpu'])
+
+    vm_set_hw(esx, vm, 'hw_vcpu', config_json['hw_vcpu'])
+
+    esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
+    vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
     request.set_element_spec(spec)
     task = esx._proxy.ReconfigVM_Task(request)._returnval
