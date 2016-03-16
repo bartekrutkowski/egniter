@@ -4,22 +4,32 @@ import re
 import sys
 
 import configparser
-from pysphere import VIServer, VITask, VIApiException, VIException
-from pysphere.resources import VimService_services as VI
 
 
-parser = argparse.ArgumentParser(description='ESX Igniter', prog='egniter')
-parser.add_argument('-c', action="store", dest="config_file", required=True)
-parser.add_argument('-f', action="store", dest="json_file", required=True)
-parser.add_argument('-d', action="store_true", dest="delete_vm")
-args = parser.parse_args()
+def get_args():
+    parser = argparse.ArgumentParser(description='ESX Igniter', prog='egniter')
+    parser.add_argument('-c', '--config',
+                        action="store",
+                        dest="config_file",
+                        required=True,
+                        help='Path to Egniter config file')
+    parser.add_argument('-j', '--json',
+                        action="store",
+                        dest="json_file",
+                        required=True,
+                        help='Path to JSON file with VM definition')
+    parser.add_argument('-d', '--delete',
+                        action="store_true",
+                        dest="delete_vm",
+                        help='Delete VM if it exists')
+    args = parser.parse_args()
+    return args
 
 
-config = configparser.ConfigParser()
-config.read(args.config_file)
-ESX_HOST = config['esx']['host']
-ESX_USER = config['esx']['user']
-ESX_PASS = config['esx']['pass']
+def get_config(config_file):
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    return config['esx']['host'], config['esx']['user'], config['esx']['pass']
 
 
 def esx_rp_get(esx, rp_name):
@@ -326,6 +336,7 @@ def launch_vm(json_file):
 
 
 def main():
+    args = get_args()
     launch_vm(args.json_file)
 
 if __name__ == '__main__':
