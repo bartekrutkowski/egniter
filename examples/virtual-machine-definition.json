@@ -1,6 +1,9 @@
 {
-  "hw_resourcepool": "foo-resource-pool-name",
-  "hw_datastore": "bar-datastore-name",
+  "hw_vm_name": "vm_name",
+  "hw_datacenter": "datacenter-name",
+  "hw_resource_pool": "resource-pool-name",
+  "hw_datastore": "datastore-name",
+  "hw_cluster": "cluster-name",
   "hw_folder": "foo-folder-name",
   "hw_template": "ubuntu_12.04_64",
   "hw_vmnet": {

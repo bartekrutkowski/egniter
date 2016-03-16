@@ -68,14 +68,14 @@ def json_read(path):
         with open(path, 'r') as f:
             json_data = f.read()
     except:
-        print("There were issues reading json data file: %s" % path)
-        return 1
+        print("Error reading json data file: %s" % path)
+        sys.exit(1)
     try:
         config_json = json.loads(json_data)
         return config_json
     except:
-        print("There were issues in loading json data into config object.")
-        return 1
+        print("Error loading json data into config object.")
+        sys.exit(1)
 
 
 def config_create(config_json):
@@ -343,6 +343,43 @@ def launch_vm(json_file):
 # newv pyvmomi functions
 
 
+def esx_clone_vm(esx, vm_config):
+    """
+    Clone a VM from a template/VM, datacenter_name, vm_folder, datastore_name
+    cluster_name, resource_pool, and power_on are all optional.
+    """
+
+    # set relospec
+    relospec = vim.vm.RelocateSpec()
+    relospec.datastore = esx_get_instance(esx, [vim.Datastore],
+                                          vm_config['hw_datastore'])
+    relospec.pool = esx_get_instance(esx, [vim.ResourcePool],
+                                     vm_config['hw_resource_pool'])
+    clonespec = vim.vm.CloneSpec()
+    clonespec.location = relospec
+
+    template = esx_get_instance(esx, [vim.VirtualMachine],
+                                vm_config['hw_template'])
+    folder = esx_get_instance(esx, [vim.Folder], vm_config['hw_folder'])
+    task = template.Clone(folder=folder,
+                          name=vm_config['hw_vm_name'],
+                          spec=clonespec)
+    esx_watch_task(task)
+
+
+def esx_watch_task(task):
+    """ wait for a vCenter task to finish."""
+    print('Executing task...')
+    while True:
+        if task.info.state == 'success':
+            print(task.info.result)
+            return 0
+
+        if task.info.state == 'error':
+            print('Error executing task: %s' % task.info.error.msg)
+            sys.exit(1)
+
+
 def esx_connect(host, user, password, strict_ssl=False):
     """
     Connect to the vCenter and return the connection object.
@@ -367,8 +404,8 @@ def esx_get_instance(esx, instance_type, instance_name):
     """
     Return an instance by name, or None if it's not found.
     """
-    container = esx.viewManager.CreateContainerView(esx.rootFolder, instance_type,
-                                                    True)
+    container = esx.viewManager.CreateContainerView(esx.rootFolder,
+                                                    instance_type, True)
     for obj in container.view:
         if obj.name == instance_name:
             return obj
@@ -387,7 +424,7 @@ def main():
     atexit.register(Disconnect, esx)
 
     vm_conf = json_read(args.json_file)
-    template = esx_get_instance(esx, [vim.VirtualMachine], vm_conf['hw_template'])
+    esx_clone_vm(esx, vm_conf)
 
 
 if __name__ == '__main__':
