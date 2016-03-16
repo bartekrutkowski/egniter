@@ -3,9 +3,11 @@ import json
 import re
 import sys
 import ssl
+import atexit
 
 import requests
 import configparser
+from pyVmomi import vim
 from pyVim.connect import SmartConnect, Disconnect
 
 
@@ -122,26 +124,6 @@ def config_create(config_json):
                 'category': 'VAPP_CATEGORY'
             })
     return vapp_properties
-
-
-def esx_connect(host, user, password, strict_ssl=False):
-    """
-    Connect to the vCenter and return the connection object.
-    """
-    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
-    if not strict_ssl:
-        requests.packages.urllib3.disable_warnings()
-        context.verify_mode = ssl.CERT_NONE
-    si = SmartConnect(host=host, user=user, pwd=password, sslContext=context)
-    try:
-        esx = SmartConnect(host=host,
-                          user=user,
-                          pwd=password,
-                          sslContext=context)
-    except Exception as e:
-        print("Error while connecting to esx: %s" % e)
-        sys.exit(1)
-    return esx
 
 
 def esx_vm_get(esx, vm_name):
@@ -358,11 +340,54 @@ def launch_vm(json_file):
     esx_vm_configure(config_json)
     dst_vm.power_on()
 
+# newv pyvmomi functions
+
+
+def esx_connect(host, user, password, strict_ssl=False):
+    """
+    Connect to the vCenter and return the connection object.
+    """
+    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+    if not strict_ssl:
+        requests.packages.urllib3.disable_warnings()
+        context.verify_mode = ssl.CERT_NONE
+    try:
+        si = SmartConnect(host=host,
+                          user=user,
+                          pwd=password,
+                          sslContext=context)
+        esx = si.RetrieveContent()
+    except Exception as e:
+        print("Error while connecting to esx: %s" % e)
+        sys.exit(1)
+    return esx
+
+
+def esx_get_instance(esx, instance_type, instance_name):
+    """
+    Return an instance by name, or None if it's not found.
+    """
+    container = esx.viewManager.CreateContainerView(esx.rootFolder, instance_type,
+                                                    True)
+    for obj in container.view:
+        if obj.name == instance_name:
+            return obj
+    return None
+
 
 def main():
+    """
+    Let's get this party started!
+    """
+
     args = get_args()
     esx_host, esx_user, esx_pass = get_config(args.config_file)
+
     esx = esx_connect(esx_host, esx_user, esx_pass, args.strict_ssl)
+    atexit.register(Disconnect, esx)
+
+    vm_conf = json_read(args.json_file)
+    template = esx_get_instance(esx, [vim.VirtualMachine], vm_conf['hw_template'])
 
 
 if __name__ == '__main__':
