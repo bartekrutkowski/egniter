@@ -2,11 +2,17 @@ import argparse
 import json
 import re
 import sys
+import ssl
 
+import requests
 import configparser
+from pyVim.connect import SmartConnect, Disconnect
 
 
 def get_args():
+    """
+    Get commandline arguments and parse them.
+    """
     parser = argparse.ArgumentParser(description='ESX Igniter', prog='egniter')
     parser.add_argument('-c', '--config',
                         action="store",
@@ -22,11 +28,18 @@ def get_args():
                         action="store_true",
                         dest="delete_vm",
                         help='Delete VM if it exists')
+    parser.add_argument('-s', '--strict-ssl',
+                        action="store_true",
+                        dest="strict_ssl",
+                        help='Do strict SSL cert checks')
     args = parser.parse_args()
     return args
 
 
 def get_config(config_file):
+    """
+    Read and parse passed config file, return ESX login credentials.
+    """
     config = configparser.ConfigParser()
     config.read(config_file)
     return config['esx']['host'], config['esx']['user'], config['esx']['pass']
@@ -111,21 +124,31 @@ def config_create(config_json):
     return vapp_properties
 
 
-def esx_connect(host, user, password):
-    esx = VIServer()
+def esx_connect(host, user, password, strict_ssl=False):
+    """
+    Connect to the vCenter and return the connection object.
+    """
+    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+    if not strict_ssl:
+        requests.packages.urllib3.disable_warnings()
+        context.verify_mode = ssl.CERT_NONE
+    si = SmartConnect(host=host, user=user, pwd=password, sslContext=context)
     try:
-        esx.connect(host, user, password)
-    except VIApiException, e:
-        print("There was an error while connecting to esx: %s" % e)
-        return 1
+        esx = SmartConnect(host=host,
+                          user=user,
+                          pwd=password,
+                          sslContext=context)
+    except Exception as e:
+        print("Error while connecting to esx: %s" % e)
+        sys.exit(1)
     return esx
 
 
 def esx_vm_get(esx, vm_name):
     try:
         vm = esx.get_vm_by_name(vm_name)
-    except VIException, e:
-        print ("There was an error while getting the vm: %s" % e)
+    except VIException as e:
+        print("There was an error while getting the vm: %s" % e)
         return 1
     return vm
 
@@ -135,7 +158,7 @@ def esx_vm_configure(config_json):
     config = config_create(config_json)
     properties = []
 
-    esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
+    esx = esx_connect(esx_host, esx_user, esx_pass)
     vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
     request = VI.ReconfigVM_TaskRequestMsg()
@@ -168,7 +191,7 @@ def esx_vm_configure(config_json):
         [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
     esx.disconnect()
 
-    esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
+    esx = esx_connect(esx_host, esx_user, esx_pass)
     vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
     spec = request.new_spec()
@@ -182,7 +205,7 @@ def esx_vm_configure(config_json):
         [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
     esx.disconnect()
 
-    esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
+    esx = esx_connect(esx_host, esx_user, esx_pass)
     vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
     request = VI.ReconfigVM_TaskRequestMsg()
@@ -201,9 +224,9 @@ def esx_vm_configure(config_json):
     status = vi_task.wait_for_state(
         [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
     if status == vi_task.STATE_ERROR:
-        print ('ERROR: %s' % vi_task.get_error_message())
+        print('ERROR: %s' % vi_task.get_error_message())
     else:
-        print ('vApp config successful.')
+        print('vApp config successful.')
     esx.disconnect()
 
     # iterate over disk dictionary and add any disks found
@@ -211,7 +234,7 @@ def esx_vm_configure(config_json):
     # as the disk with number 0 is already inherited from the template
     if 'hw_disk_gb' in config_json:
         for disk in config_json['hw_disk_gb']:
-            esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
+            esx = esx_connect(esx_host, esx_user, esx_pass)
             vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
             request = VI.ReconfigVM_TaskRequestMsg()
@@ -254,15 +277,15 @@ def esx_vm_configure(config_json):
             status = vi_task.wait_for_state([vi_task.STATE_SUCCESS,
                                              vi_task.STATE_ERROR])
             if status == vi_task.STATE_ERROR:
-                print ('ERROR: %s' % vi_task.get_error_message())
+                print('ERROR: %s' % vi_task.get_error_message())
             else:
-                print ('Disk config successful.')
+                print('Disk config successful.')
             esx.disconnect()
 
     # iterate over network adapter dictionary and add any adapters found
     # to the vm configuration
     for adapter in config_json['hw_vmnet']['adapter']:
-        esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
+        esx = esx_connect(esx_host, esx_user, esx_pass)
         vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
 
         request = VI.ReconfigVM_TaskRequestMsg()
@@ -293,14 +316,14 @@ def esx_vm_configure(config_json):
         status = vi_task.wait_for_state([vi_task.STATE_SUCCESS,
                                          vi_task.STATE_ERROR])
         if status == vi_task.STATE_ERROR:
-            print ('ERROR: %s' % vi_task.get_error_message())
+            print('ERROR: %s' % vi_task.get_error_message())
         else:
-            print ('Network adapter config successful.')
+            print('Network adapter config successful.')
         esx.disconnect()
 
 
 def esx_vm_destroy(vm_name):
-    esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
+    esx = esx_connect(esx_host, esx_user, esx_pass)
     try:
         vm = esx_vm_get(esx, vm_name)
         if not isinstance(vm, int):
@@ -311,33 +334,36 @@ def esx_vm_destroy(vm_name):
             if not vm.is_powered_off():
                 vm.power_off()
             vm.destroy()
-            print ('VM has been deleted.')
+            print('VM has been deleted.')
             return
-        print ('VM not found, no need to delete anything.')
+        print('VM not found, no need to delete anything.')
         return
-    except VIException, e:
+    except VIException as e:
         print('There were issues while getting vm: %s' % e)
         return
 
 
 def launch_vm(json_file):
     config_json = json_read(json_file)
-    esx_vm_destroy(config_json['vapp_net_hostname'])
-    esx = esx_connect(ESX_HOST, ESX_USER, ESX_PASS)
+    #esx_vm_destroy(config_json['vapp_net_hostname'])
+    esx = esx_connect(esx_host, esx_user, esx_pass)
     src_vm = esx_vm_get(esx, config_json['hw_template'])
     resourcepool = esx_rp_get(esx, config_json['hw_resourcepool'])
     datastore = esx_ds_get(esx, config_json['hw_datastore'])
     dst_vm = src_vm.clone(
         name=config_json['vapp_net_hostname'],
         resourcepool=resourcepool,
-        datastore=datastore, power_on=False)
+        datastore=datastore,
+        power_on=False)
     esx_vm_configure(config_json)
     dst_vm.power_on()
 
 
 def main():
     args = get_args()
-    launch_vm(args.json_file)
+    esx_host, esx_user, esx_pass = get_config(args.config_file)
+    esx = esx_connect(esx_host, esx_user, esx_pass, args.strict_ssl)
+
 
 if __name__ == '__main__':
     main()
