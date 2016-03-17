@@ -11,42 +11,6 @@ from pyVmomi import vim
 from pyVim.connect import SmartConnect, Disconnect
 
 
-def get_args():
-    """
-    Get commandline arguments and parse them.
-    """
-    parser = argparse.ArgumentParser(description='ESX Igniter', prog='egniter')
-    parser.add_argument('-c', '--config',
-                        action="store",
-                        dest="config_file",
-                        required=True,
-                        help='Path to Egniter config file')
-    parser.add_argument('-j', '--json',
-                        action="store",
-                        dest="json_file",
-                        required=True,
-                        help='Path to JSON file with VM definition')
-    parser.add_argument('-d', '--delete',
-                        action="store_true",
-                        dest="delete_vm",
-                        help='Delete VM if it exists')
-    parser.add_argument('-s', '--strict-ssl',
-                        action="store_true",
-                        dest="strict_ssl",
-                        help='Do strict SSL cert checks')
-    args = parser.parse_args()
-    return args
-
-
-def get_config(config_file):
-    """
-    Read and parse passed config file, return ESX login credentials.
-    """
-    config = configparser.ConfigParser()
-    config.read(config_file)
-    return config['esx']['host'], config['esx']['user'], config['esx']['pass']
-
-
 def esx_rp_get(esx, rp_name):
     rps = esx.get_resource_pools()
     for mor, path in rps.iteritems():
@@ -62,20 +26,6 @@ def esx_ds_get(esx, ds_name):
             return mor
     return None
 
-
-def json_read(path):
-    try:
-        with open(path, 'r') as f:
-            json_data = f.read()
-    except:
-        print("Error reading json data file: %s" % path)
-        sys.exit(1)
-    try:
-        config_json = json.loads(json_data)
-        return config_json
-    except:
-        print("Error loading json data into config object.")
-        sys.exit(1)
 
 
 def config_create(config_json):
@@ -342,6 +292,123 @@ def launch_vm(json_file):
 
 # newv pyvmomi functions
 
+def get_args():
+    """
+    Get commandline arguments and parse them.
+    """
+    parser = argparse.ArgumentParser(description='ESX Igniter', prog='egniter')
+    parser.add_argument('-c', '--config',
+                        action="store",
+                        dest="config_file",
+                        required=True,
+                        help='Path to Egniter config file')
+    parser.add_argument('-j', '--json',
+                        action="store",
+                        dest="json_file",
+                        required=True,
+                        help='Path to JSON file with VM definition')
+    parser.add_argument('-d', '--delete',
+                        action="store_true",
+                        dest="delete_vm",
+                        help='Delete VM if it exists')
+    parser.add_argument('-s', '--strict-ssl',
+                        action="store_true",
+                        dest="strict_ssl",
+                        help='Do strict SSL cert checks')
+    args = parser.parse_args()
+    return args
+
+
+def get_config(config_file):
+    """
+    Read and parse passed config file, return ESX login credentials.
+    """
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    return config['esx']['host'], config['esx']['user'], config['esx']['pass']
+
+
+def json_read(path):
+    try:
+        with open(path, 'r') as f:
+            json_data = f.read()
+    except:
+        print("Error reading json data file: %s" % path)
+        sys.exit(1)
+    try:
+        config_json = json.loads(json_data)
+        return config_json
+    except:
+        print("Error loading json data into config object.")
+        sys.exit(1)
+
+
+def esx_make_config_spec(vm_config):
+    """
+    Generate and return VM hardware spec object based on passed specification dictionary.
+    """
+
+    spec = vim.vm.ConfigSpec()
+    spec.memoryMB = vm_config['hw_mem_mb']
+    spec.numCPUs = vm_config['hw_vcpu']
+    return spec
+
+
+def esx_make_disk_spec(disk_num, disk_size):
+    """
+    Generate and return VM disk spec object based on passed specification dictionary.
+    """
+
+    spec = vim.vm.device.VirtualDeviceSpec()
+    spec.fileOperation = "create"
+    spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+    spec.device = vim.vm.device.VirtualDisk()
+    spec.device.backing = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
+    spec.device.backing.diskMode = 'persistent'
+    spec.device.unitNumber = int(disk_num)
+    spec.device.capacityInKB = int(disk_size * 1024 * 1024)
+    return spec
+
+
+def esx_vm_add_disk(vm, disk_spec):
+    """
+    Adds disk to existing vm using spec provided.
+    """
+
+    # find the controller device
+    for device in vm.config.hardware.device:
+        if isinstance(device, vim.vm.device.VirtualSCSIController):
+            disk_spec.device.controllerKey = device.key
+
+    spec = vim.vm.ConfigSpec()
+    spec.deviceChange.append(disk_spec)
+
+    vm.ReconfigVM_Task(spec=spec)
+
+
+def esx_make_relocate_spec(esx, vm_config):
+    """
+    Generate and return VM relocate spec object based on passed specification dictionary.
+    """
+
+    spec = vim.vm.RelocateSpec()
+    spec.datastore = esx_get_instance(esx, [vim.Datastore],
+                                      vm_config['hw_datastore'])
+    spec.pool = esx_get_instance(esx, [vim.ResourcePool],
+                                 vm_config['hw_resource_pool'])
+    return spec
+
+
+def esx_make_clone_spec(esx, vm_config):
+    """
+    Generate and return VM clone spec object based on passed specification dictionary.
+    """
+
+    spec = vim.vm.CloneSpec()
+    spec.config = esx_make_config_spec(vm_config)
+    spec.location = esx_make_relocate_spec(esx, vm_config)
+    return spec
+
 
 def esx_clone_vm(esx, vm_config):
     """
@@ -349,31 +416,27 @@ def esx_clone_vm(esx, vm_config):
     cluster_name, resource_pool, and power_on are all optional.
     """
 
-    # set relospec
-    relospec = vim.vm.RelocateSpec()
-    relospec.datastore = esx_get_instance(esx, [vim.Datastore],
-                                          vm_config['hw_datastore'])
-    relospec.pool = esx_get_instance(esx, [vim.ResourcePool],
-                                     vm_config['hw_resource_pool'])
-    clonespec = vim.vm.CloneSpec()
-    clonespec.location = relospec
+    clonespec = esx_make_clone_spec(esx, vm_config)
 
     template = esx_get_instance(esx, [vim.VirtualMachine],
                                 vm_config['hw_template'])
     folder = esx_get_instance(esx, [vim.Folder], vm_config['hw_folder'])
-    task = template.Clone(folder=folder,
-                          name=vm_config['hw_vm_name'],
-                          spec=clonespec)
-    esx_watch_task(task)
+
+    vm = esx_watch_task(template.Clone(folder=folder,
+                                       name=vm_config['hw_vm_name'],
+                                       spec=clonespec))
+    return vm
 
 
 def esx_watch_task(task):
-    """ wait for a vCenter task to finish."""
+    """
+    Wait for a vCenter task to finish.
+    """
+
     print('Executing task...')
     while True:
         if task.info.state == 'success':
-            print(task.info.result)
-            return 0
+            return task.info.result
 
         if task.info.state == 'error':
             print('Error executing task: %s' % task.info.error.msg)
@@ -384,6 +447,7 @@ def esx_connect(host, user, password, strict_ssl=False):
     """
     Connect to the vCenter and return the connection object.
     """
+
     context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
     if not strict_ssl:
         requests.packages.urllib3.disable_warnings()
@@ -404,6 +468,7 @@ def esx_get_instance(esx, instance_type, instance_name):
     """
     Return an instance by name, or None if it's not found.
     """
+
     container = esx.viewManager.CreateContainerView(esx.rootFolder,
                                                     instance_type, True)
     for obj in container.view:
@@ -412,7 +477,7 @@ def esx_get_instance(esx, instance_type, instance_name):
     return None
 
 
-def main():
+if __name__ == '__main__':
     """
     Let's get this party started!
     """
@@ -424,8 +489,8 @@ def main():
     atexit.register(Disconnect, esx)
 
     vm_conf = json_read(args.json_file)
-    esx_clone_vm(esx, vm_conf)
+    vm = esx_clone_vm(esx, vm_conf)
 
-
-if __name__ == '__main__':
-    main()
+    for disk in vm_conf['hw_disk_gb']:
+        disk_spec = esx_make_disk_spec(disk, vm_conf['hw_disk_gb'][disk])
+        esx_vm_add_disk(vm, disk_spec)
