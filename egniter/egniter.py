@@ -1,6 +1,5 @@
 import argparse
 import json
-import re
 import sys
 import ssl
 import atexit
@@ -227,21 +226,6 @@ def esx_vm_configure(config_json):
             print('Network adapter config successful.')
         esx.disconnect()
 
-
-def launch_vm(json_file):
-    config_json = json_read(json_file)
-    #esx_vm_destroy(config_json['vapp_net_hostname'])
-    esx = esx_connect(esx_host, esx_user, esx_pass)
-    src_vm = esx_vm_get(esx, config_json['hw_template'])
-    resourcepool = esx_rp_get(esx, config_json['hw_resourcepool'])
-    datastore = esx_ds_get(esx, config_json['hw_datastore'])
-    dst_vm = src_vm.clone(
-        name=config_json['vapp_net_hostname'],
-        resourcepool=resourcepool,
-        datastore=datastore,
-        power_on=False)
-    esx_vm_configure(config_json)
-    dst_vm.power_on()
 
 # newv pyvmomi functions
 
