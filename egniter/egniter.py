@@ -11,23 +11,6 @@ from pyVmomi import vim
 from pyVim.connect import SmartConnect, Disconnect
 
 
-def esx_rp_get(esx, rp_name):
-    rps = esx.get_resource_pools()
-    for mor, path in rps.iteritems():
-        if re.match('.*%s' % rp_name, path):
-            return mor
-    return None
-
-
-def esx_ds_get(esx, ds_name):
-    datastores = esx.get_datastores()
-    for mor, path in datastores.iteritems():
-        if re.match('.*%s' % ds_name, path):
-            return mor
-    return None
-
-
-
 def config_create(config_json):
     counter = 1000
     vapp_properties = {'add': []}
@@ -74,15 +57,6 @@ def config_create(config_json):
                 'category': 'VAPP_CATEGORY'
             })
     return vapp_properties
-
-
-def esx_vm_get(esx, vm_name):
-    try:
-        vm = esx.get_vm_by_name(vm_name)
-    except VIException as e:
-        print("There was an error while getting the vm: %s" % e)
-        return 1
-    return vm
 
 
 def esx_vm_configure(config_json):
@@ -291,6 +265,7 @@ def launch_vm(json_file):
     dst_vm.power_on()
 
 # newv pyvmomi functions
+
 
 def get_args():
     """
