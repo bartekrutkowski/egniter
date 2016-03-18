@@ -228,27 +228,6 @@ def esx_vm_configure(config_json):
         esx.disconnect()
 
 
-def esx_vm_destroy(vm_name):
-    esx = esx_connect(esx_host, esx_user, esx_pass)
-    try:
-        vm = esx_vm_get(esx, vm_name)
-        if not isinstance(vm, int):
-            if not args.delete_vm:
-                print('ERROR: I cant destroy the VM, because delete '
-                      'argument was not used, exiting.')
-                sys.exit(1)
-            if not vm.is_powered_off():
-                vm.power_off()
-            vm.destroy()
-            print('VM has been deleted.')
-            return
-        print('VM not found, no need to delete anything.')
-        return
-    except VIException as e:
-        print('There were issues while getting vm: %s' % e)
-        return
-
-
 def launch_vm(json_file):
     config_json = json_read(json_file)
     #esx_vm_destroy(config_json['vapp_net_hostname'])
@@ -282,10 +261,10 @@ def get_args():
                         dest="json_file",
                         required=True,
                         help='Path to JSON file with VM definition')
-    parser.add_argument('-d', '--delete',
+    parser.add_argument('-d', '--destroy',
                         action="store_true",
-                        dest="delete_vm",
-                        help='Delete VM if it exists')
+                        dest="destroy_vm",
+                        help='Destroy VM if it exists')
     parser.add_argument('-s', '--strict-ssl',
                         action="store_true",
                         dest="strict_ssl",
@@ -403,12 +382,22 @@ def esx_clone_vm(esx, vm_config):
     return vm
 
 
+def esx_vm_destroy(esx, vm_name):
+    """
+    Destroys the vm based on the name provided.
+    """
+
+    vm = esx_get_instance(esx, [vim.VirtualMachine], vm_name)
+    task = vm.Destroy_Task()
+    return esx_watch_task(task)
+
+
 def esx_watch_task(task):
     """
     Wait for a vCenter task to finish.
     """
 
-    print('Executing task...')
+    print('Executing task.')
     while True:
         if task.info.state == 'success':
             return task.info.result
@@ -442,6 +431,10 @@ def esx_connect(host, user, password, strict_ssl=False):
 def esx_get_instance(esx, instance_type, instance_name):
     """
     Return an instance by name, or None if it's not found.
+
+    :esx esx connection content object (from esx_connect() function)
+    :instance_type vim type of instance to look for (like [vim.VirtualMachine])
+    :instance_name string with the name of instance to look for
     """
 
     container = esx.viewManager.CreateContainerView(esx.rootFolder,
@@ -464,6 +457,10 @@ if __name__ == '__main__':
     atexit.register(Disconnect, esx)
 
     vm_conf = json_read(args.json_file)
+
+    if args.destroy_vm:
+        esx_vm_destroy(esx, vm_conf['hw_vm_name'])
+
     vm = esx_clone_vm(esx, vm_conf)
 
     for disk in vm_conf['hw_disk_gb']:
