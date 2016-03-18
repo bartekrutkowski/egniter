@@ -58,175 +58,6 @@ def config_create(config_json):
     return vapp_properties
 
 
-def esx_vm_configure(config_json):
-
-    config = config_create(config_json)
-    properties = []
-
-    esx = esx_connect(esx_host, esx_user, esx_pass)
-    vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
-
-    request = VI.ReconfigVM_TaskRequestMsg()
-    _this = request.new__this(vm._mor)
-    _this.set_attribute_type(vm._mor.get_attribute_type())
-    request.set_element__this(_this)
-
-    spec = request.new_spec()
-    vappconfig = spec.new_vAppConfig()
-
-    for operation, items in config.items():
-        for item in items:
-            prop = vappconfig.new_property()
-            prop.set_element_operation(operation)
-            info = prop.new_info()
-            for k, v in item.items():
-                method = getattr(info, "set_element_" + k)
-                method(v)
-            prop.set_element_info(info)
-            properties.append(prop)
-
-    vappconfig.set_element_property(properties)
-    spec.set_element_vAppConfig(vappconfig)
-
-    request.set_element_spec(spec)
-    task = esx._proxy.ReconfigVM_Task(request)._returnval
-    vi_task = VITask(task, esx)
-
-    status = vi_task.wait_for_state(
-        [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
-    esx.disconnect()
-
-    esx = esx_connect(esx_host, esx_user, esx_pass)
-    vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
-
-    spec = request.new_spec()
-    spec.set_element_memoryMB(config_json['hw_mem_mb'])
-
-    request.set_element_spec(spec)
-    task = esx._proxy.ReconfigVM_Task(request)._returnval
-    vi_task = VITask(task, esx)
-
-    status = vi_task.wait_for_state(
-        [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
-    esx.disconnect()
-
-    esx = esx_connect(esx_host, esx_user, esx_pass)
-    vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
-
-    request = VI.ReconfigVM_TaskRequestMsg()
-    _this = request.new__this(vm._mor)
-    _this.set_attribute_type(vm._mor.get_attribute_type())
-    request.set_element__this(_this)
-
-    spec = request.new_spec()
-    spec.set_element_numCoresPerSocket(config_json['hw_vcpu'])
-    spec.set_element_numCPUs(config_json['hw_vcpu'])
-
-    request.set_element_spec(spec)
-    task = esx._proxy.ReconfigVM_Task(request)._returnval
-    vi_task = VITask(task, esx)
-
-    status = vi_task.wait_for_state(
-        [vi_task.STATE_SUCCESS, vi_task.STATE_ERROR])
-    if status == vi_task.STATE_ERROR:
-        print('ERROR: %s' % vi_task.get_error_message())
-    else:
-        print('vApp config successful.')
-    esx.disconnect()
-
-    # iterate over disk dictionary and add any disks found
-    # to the vm configuration - the dict disk number starts with 1, not 0
-    # as the disk with number 0 is already inherited from the template
-    if 'hw_disk_gb' in config_json:
-        for disk in config_json['hw_disk_gb']:
-            esx = esx_connect(esx_host, esx_user, esx_pass)
-            vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
-
-            request = VI.ReconfigVM_TaskRequestMsg()
-            _this = request.new__this(vm._mor)
-            _this.set_attribute_type(vm._mor.get_attribute_type())
-            request.set_element__this(_this)
-
-            spec = request.new_spec()
-
-            dc = spec.new_deviceChange()
-            dc.Operation = "add"
-            dc.FileOperation = "create"
-
-            hd = VI.ns0.VirtualDisk_Def("hd").pyclass()
-            hd.Key = -100
-            hd.UnitNumber = int(disk)
-            hd.CapacityInKB = config_json['hw_disk_gb'][disk] * 1024 * 1024
-            hd.ControllerKey = 1000
-
-            backing = VI.ns0.VirtualDiskFlatVer2BackingInfo_Def(
-                "backing").pyclass()
-            backing.FileName = "%s" % vm.get_property('path').split()[0]
-            backing.DiskMode = "persistent"
-            backing.Split = False
-            backing.WriteThrough = False
-            backing.ThinProvisioned = False
-            backing.EagerlyScrub = False
-            hd.Backing = backing
-
-            dc.Device = hd
-
-            spec.DeviceChange = [dc]
-            request.Spec = spec
-
-            request.set_element_spec(spec)
-            task = esx._proxy.ReconfigVM_Task(request)._returnval
-            vi_task = VITask(task, esx)
-
-            # Wait for task to finis
-            status = vi_task.wait_for_state([vi_task.STATE_SUCCESS,
-                                             vi_task.STATE_ERROR])
-            if status == vi_task.STATE_ERROR:
-                print('ERROR: %s' % vi_task.get_error_message())
-            else:
-                print('Disk config successful.')
-            esx.disconnect()
-
-    # iterate over network adapter dictionary and add any adapters found
-    # to the vm configuration
-    for adapter in config_json['hw_vmnet']['adapter']:
-        esx = esx_connect(esx_host, esx_user, esx_pass)
-        vm = esx_vm_get(esx, config_json['vapp_net_hostname'])
-
-        request = VI.ReconfigVM_TaskRequestMsg()
-        _this = request.new__this(vm._mor)
-        _this.set_attribute_type(vm._mor.get_attribute_type())
-        request.set_element__this(_this)
-
-        spec = request.new_spec()
-        dev_change = spec.new_deviceChange()
-        dev_change.set_element_operation('add')
-        nic_ctlr = VI.ns0.VirtualVmxnet3_Def('nic_ctlr').pyclass()
-        nic_backing = VI.ns0.VirtualEthernetCardNetworkBackingInfo_Def(
-            'nic_backing').pyclass()
-        nic_backing.set_element_deviceName(
-            config_json['hw_vmnet']['adapter'][adapter]['label'])
-        nic_ctlr.set_element_addressType('generated')
-        nic_ctlr.set_element_backing(nic_backing)
-        nic_ctlr.set_element_key(4)
-        dev_change.set_element_device(nic_ctlr)
-
-        spec.set_element_deviceChange([dev_change])
-        request.set_element_spec(spec)
-        ret = esx._proxy.ReconfigVM_Task(request)._returnval
-
-        # Wait for the task to finish
-        vi_task = VITask(ret, esx)
-
-        status = vi_task.wait_for_state([vi_task.STATE_SUCCESS,
-                                         vi_task.STATE_ERROR])
-        if status == vi_task.STATE_ERROR:
-            print('ERROR: %s' % vi_task.get_error_message())
-        else:
-            print('Network adapter config successful.')
-        esx.disconnect()
-
-
 # newv pyvmomi functions
 
 
@@ -283,7 +114,7 @@ def json_read(path):
 
 def esx_make_config_spec(vm_config):
     """
-    Generate and return VM hardware spec object based on passed specification dictionary.
+    Generate and return VM hardware spec object based on passed dictionary.
     """
 
     spec = vim.vm.ConfigSpec()
@@ -294,7 +125,7 @@ def esx_make_config_spec(vm_config):
 
 def esx_make_disk_spec(disk_num, disk_size):
     """
-    Generate and return VM disk spec object based on passed specification dictionary.
+    Generate and return VM disk spec object based on passed dictionary.
     """
 
     spec = vim.vm.device.VirtualDeviceSpec()
@@ -326,7 +157,7 @@ def esx_vm_add_disk(vm, disk_spec):
 
 def esx_make_relocate_spec(esx, vm_config):
     """
-    Generate and return VM relocate spec object based on passed specification dictionary.
+    Generate and return VM relocate spec object based on passed dictionary.
     """
 
     spec = vim.vm.RelocateSpec()
@@ -339,7 +170,7 @@ def esx_make_relocate_spec(esx, vm_config):
 
 def esx_make_clone_spec(esx, vm_config):
     """
-    Generate and return VM clone spec object based on passed specification dictionary.
+    Generate and return VM clone spec object based on passed dictionary.
     """
 
     spec = vim.vm.CloneSpec()
@@ -385,7 +216,8 @@ def esx_watch_task(task):
     Wait for a vCenter task to finish.
     """
 
-    print('Executing task: {task}, {name}'.format(task=task.info.descriptionId, name=task.info.entityName))
+    print('Executing task: {task}, {name}'.format(task=task.info.descriptionId,
+                                                  name=task.info.entityName))
     while True:
         if task.info.state == 'success':
             return task.info.result
