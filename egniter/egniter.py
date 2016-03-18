@@ -298,13 +298,13 @@ def esx_make_disk_spec(disk_num, disk_size):
     """
 
     spec = vim.vm.device.VirtualDeviceSpec()
-    spec.fileOperation = "create"
+    spec.fileOperation = 'create'
     spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
     spec.device = vim.vm.device.VirtualDisk()
     spec.device.backing = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
     spec.device.backing.diskMode = 'persistent'
-    spec.device.unitNumber = int(disk_num)
-    spec.device.capacityInKB = int(disk_size * 1024 * 1024)
+    spec.device.unitNumber = int(disk_num) + 1
+    spec.device.capacityInKB = int(disk_size) * 1024 * 1024
     return spec
 
 
@@ -321,7 +321,7 @@ def esx_vm_add_disk(vm, disk_spec):
     spec = vim.vm.ConfigSpec()
     spec.deviceChange.append(disk_spec)
 
-    vm.ReconfigVM_Task(spec=spec)
+    esx_watch_task(vm.ReconfigVM_Task(spec=spec))
 
 
 def esx_make_relocate_spec(esx, vm_config):
@@ -372,8 +372,12 @@ def esx_vm_destroy(esx, vm_name):
     """
 
     vm = esx_get_instance(esx, [vim.VirtualMachine], vm_name)
+    if not vm:
+        print('No vm {} found.'.format(vm_name))
+        return
     task = vm.Destroy_Task()
-    return esx_watch_task(task)
+    esx_watch_task(task)
+    return
 
 
 def esx_watch_task(task):
@@ -381,7 +385,7 @@ def esx_watch_task(task):
     Wait for a vCenter task to finish.
     """
 
-    print('Executing task.')
+    print('Executing task: {task}, {name}'.format(task=task.info.descriptionId, name=task.info.entityName))
     while True:
         if task.info.state == 'success':
             return task.info.result
@@ -447,6 +451,6 @@ if __name__ == '__main__':
 
     vm = esx_clone_vm(esx, vm_conf)
 
-    for disk in vm_conf['hw_disk_gb']:
+    for disk in sorted(vm_conf['hw_disk_gb']):
         disk_spec = esx_make_disk_spec(disk, vm_conf['hw_disk_gb'][disk])
         esx_vm_add_disk(vm, disk_spec)
