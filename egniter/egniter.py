@@ -36,7 +36,7 @@ def config_create(path):
             counter += 1
             name = k.split('vapp_')[1]
             vapp_properties['add'].append({
-                ### make VAPP_CATEGORY being configurable
+                # TODO: make VAPP_CATEGORY being configurable
                 'key': counter,
                 'id': name,
                 'value': v,
@@ -74,7 +74,6 @@ def config_create(path):
                 'category': 'VAPP_CATEGORY'
             })
     return vapp_properties
-
 
 # newv pyvmomi functions
 
@@ -168,11 +167,12 @@ def esx_make_nic_spec(esx, vm, nic_config):
     nic = vim.vm.device.VirtualDeviceSpec()
     nic.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
     nic.device = vim.vm.device.VirtualVmxnet3()
-    #nic.device.key = 4000
+    # nic.device.key = 4000
     nic.device.deviceInfo = vim.Description()
-    #nic.device.deviceInfo.label = 'Network adapter {}'.format(nic_config)
+    # nic.device.deviceInfo.label = 'Network adapter {}'.format(nic_config)
     nic.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
-    nic.device.backing.network = esx_get_instance(esx, [vim.Network], nic_config['label'])
+    nic.device.backing.network = esx_get_instance(esx, [vim.Network],
+                                                  nic_config['label'])
     nic.device.backing.deviceName = nic_config['label']
     nic.device.backing.useAutoDetect = False
     nic.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
@@ -194,7 +194,8 @@ def esx_vm_destroy_nic(vm, nic_num):
     for device in vm.config.hardware.device:
         if device.deviceInfo.label == label:
             nic_spec = vim.vm.device.VirtualDeviceSpec()
-            nic_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
+            nic_spec.operation = \
+                vim.vm.device.VirtualDeviceSpec.Operation.remove
             nic_spec.device = device
             spec = vim.vm.ConfigSpec()
             spec.deviceChange = [nic_spec]
