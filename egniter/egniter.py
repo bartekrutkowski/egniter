@@ -153,6 +153,50 @@ def esx_vm_add_disk(vm, disk_spec):
     spec.deviceChange.append(disk_spec)
 
     esx_watch_task(vm.ReconfigVM_Task(spec=spec))
+    return
+
+
+def esx_make_nic_spec(esx, vm, nic_config):
+    """
+    Creates the nic spec with given nic config.
+    """
+
+    nic = vim.vm.device.VirtualDeviceSpec()
+    nic.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+    nic.device = vim.vm.device.VirtualVmxnet3()
+    #nic.device.key = 4000
+    nic.device.deviceInfo = vim.Description()
+    #nic.device.deviceInfo.label = 'Network adapter {}'.format(nic_config)
+    nic.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+    nic.device.backing.network = esx_get_instance(esx, [vim.Network], nic_config['label'])
+    nic.device.backing.deviceName = nic_config['label']
+    nic.device.backing.useAutoDetect = False
+    nic.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+    nic.device.connectable.startConnected = True
+    nic.device.connectable.allowGuestControl = True
+
+    spec = vim.vm.ConfigSpec()
+    spec.deviceChange.append(nic)
+    esx_watch_task(vm.ReconfigVM_Task(spec=spec))
+    return
+
+
+def esx_vm_destroy_nic(vm, nic_num):
+    """
+    Destroy the nic with given unit number.
+    """
+
+    label = 'Network adapter {}'.format(nic_num)
+    for device in vm.config.hardware.device:
+        if device.deviceInfo.label == label:
+            nic_spec = vim.vm.device.VirtualDeviceSpec()
+            nic_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
+            nic_spec.device = device
+            spec = vim.vm.ConfigSpec()
+            spec.deviceChange = [nic_spec]
+            task = vm.ReconfigVM_Task(spec=spec)
+            esx_watch_task(task)
+    return
 
 
 def esx_make_relocate_spec(esx, vm_config):
@@ -272,11 +316,10 @@ if __name__ == '__main__':
 
     args = get_args()
     esx_host, esx_user, esx_pass = get_config(args.config_file)
+    vm_conf = json_read(args.json_file)
 
     esx = esx_connect(esx_host, esx_user, esx_pass, args.strict_ssl)
     atexit.register(Disconnect, esx)
-
-    vm_conf = json_read(args.json_file)
 
     if args.destroy_vm:
         esx_vm_destroy(esx, vm_conf['hw_vm_name'])
@@ -286,3 +329,10 @@ if __name__ == '__main__':
     for disk in sorted(vm_conf['hw_disk_gb']):
         disk_spec = esx_make_disk_spec(disk, vm_conf['hw_disk_gb'][disk])
         esx_vm_add_disk(vm, disk_spec)
+
+    for num in range(len(vm.config.hardware.device)):
+        esx_vm_destroy_nic(vm, num)
+
+    for nic in vm_conf['hw_vmnet']['adapter']:
+        print(vm_conf['hw_vmnet']['adapter'][nic])
+        esx_make_nic_spec(esx, vm, vm_conf['hw_vmnet']['adapter'][nic])
