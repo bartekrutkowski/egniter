@@ -10,7 +10,25 @@ from pyVmomi import vim
 from pyVim.connect import SmartConnect, Disconnect
 
 
-def config_create(config_json):
+def config_create(path):
+    """
+    Read JSON file with vm definition and return python dict object with
+    parsed details for vm creation.
+    """
+
+    try:
+        with open(path, 'r') as f:
+            json_data = f.read()
+    except:
+        print("Error reading json data file: %s" % path)
+        sys.exit(1)
+    try:
+        config_json = json.loads(json_data)
+        return config_json
+    except:
+        print("Error loading json data into config object.")
+        sys.exit(1)
+
     counter = 1000
     vapp_properties = {'add': []}
     for k, v in config_json.iteritems():
@@ -65,6 +83,7 @@ def get_args():
     """
     Get commandline arguments and parse them.
     """
+
     parser = argparse.ArgumentParser(description='ESX Igniter', prog='egniter')
     parser.add_argument('-c', '--config',
                         action="store",
@@ -95,21 +114,6 @@ def get_config(config_file):
     config = configparser.ConfigParser()
     config.read(config_file)
     return config['esx']['host'], config['esx']['user'], config['esx']['pass']
-
-
-def json_read(path):
-    try:
-        with open(path, 'r') as f:
-            json_data = f.read()
-    except:
-        print("Error reading json data file: %s" % path)
-        sys.exit(1)
-    try:
-        config_json = json.loads(json_data)
-        return config_json
-    except:
-        print("Error loading json data into config object.")
-        sys.exit(1)
 
 
 def esx_make_config_spec(vm_config):
@@ -316,7 +320,7 @@ if __name__ == '__main__':
 
     args = get_args()
     esx_host, esx_user, esx_pass = get_config(args.config_file)
-    vm_conf = json_read(args.json_file)
+    vm_conf = config_create(args.json_file)
 
     esx = esx_connect(esx_host, esx_user, esx_pass, args.strict_ssl)
     atexit.register(Disconnect, esx)
@@ -334,5 +338,4 @@ if __name__ == '__main__':
         esx_vm_destroy_nic(vm, num)
 
     for nic in vm_conf['hw_vmnet']['adapter']:
-        print(vm_conf['hw_vmnet']['adapter'][nic])
         esx_make_nic_spec(esx, vm, vm_conf['hw_vmnet']['adapter'][nic])
