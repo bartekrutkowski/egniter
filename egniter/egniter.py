@@ -314,6 +314,25 @@ def esx_get_instance(esx, instance_type, instance_name):
     return None
 
 
+def set_vapp(vm, vm_conf):
+
+    vm_spec = vim.vm.ConfigSpec()
+    vapp = vim.vApp.VmConfigSpec()
+
+    spec = vim.vApp.PropertySpec()
+    spec.operation = vim.option.ArrayUpdateSpec.Operation.add
+    spec.info = vim.vApp.PropertyInfo()
+    spec.info.id = "net_gw"
+    spec.info.value = vm_conf['hw_vmnet']['gateway']
+    spec.info.key = 1
+
+    vapp.property.append(spec)
+    vm_spec.vAppConfig = vapp
+    esx_watch_task(vm.ReconfigVM_Task(spec=vm_spec))
+
+    return
+
+
 if __name__ == '__main__':
     """
     Let's get this party started!
@@ -340,3 +359,5 @@ if __name__ == '__main__':
 
     for nic in vm_conf['hw_vmnet']['adapter']:
         esx_make_nic_spec(esx, vm, vm_conf['hw_vmnet']['adapter'][nic])
+
+    set_vapp(vm, vm_conf)
