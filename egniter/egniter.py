@@ -29,9 +29,15 @@ def config_create(path):
         print("Error loading json data into config object.")
         sys.exit(1)
 
+
+def create_vapp_properties(config_json):
+    """
+    Create vApp properties dictionary out of given JSON structure.
+    """
+
     counter = 1000
     vapp_properties = {'add': []}
-    for k, v in config_json.iteritems():
+    for k, v in config_json.items():
         if 'vapp_' in k:
             counter += 1
             name = k.split('vapp_')[1]
@@ -314,7 +320,10 @@ def esx_get_instance(esx, instance_type, instance_name):
     return None
 
 
-def set_vapp(vm, vm_conf):
+def set_vapp_property(vm, property):
+    """
+    Set vApp property on given vm.
+    """
 
     vm_spec = vim.vm.ConfigSpec()
     vapp = vim.vApp.VmConfigSpec()
@@ -322,9 +331,9 @@ def set_vapp(vm, vm_conf):
     spec = vim.vApp.PropertySpec()
     spec.operation = vim.option.ArrayUpdateSpec.Operation.add
     spec.info = vim.vApp.PropertyInfo()
-    spec.info.id = "net_gw"
-    spec.info.value = vm_conf['hw_vmnet']['gateway']
-    spec.info.key = 1
+    spec.info.id = property['id']
+    spec.info.value = property['value']
+    spec.info.key = property['key']
 
     vapp.property.append(spec)
     vm_spec.vAppConfig = vapp
@@ -350,14 +359,20 @@ if __name__ == '__main__':
 
     vm = esx_clone_vm(esx, vm_conf)
 
+    # add disks
     for disk in sorted(vm_conf['hw_disk_gb']):
         disk_spec = esx_make_disk_spec(disk, vm_conf['hw_disk_gb'][disk])
         esx_vm_add_disk(vm, disk_spec)
 
+    # destroy any existing network interfaces from template to avoid collision
     for num in range(len(vm.config.hardware.device)):
         esx_vm_destroy_nic(vm, num)
 
+    # add network interfaces
     for nic in vm_conf['hw_vmnet']['adapter']:
         esx_make_nic_spec(esx, vm, vm_conf['hw_vmnet']['adapter'][nic])
 
-    set_vapp(vm, vm_conf)
+    # create vapp properties and add them to vm
+    vapp = create_vapp_properties(vm_conf)
+    for property in vapp['add']:
+        set_vapp_property(vm, property)
